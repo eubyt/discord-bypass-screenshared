@@ -68,26 +68,14 @@ func main() {
 }
 
 func runBypassTor(reader *bufio.Reader) {
-	_, err := EnsureTorRunning()
+	port, err := EnsureTorRunning()
 	if err != nil {
 		fmt.Printf("[-] Erro ao iniciar o Tor: %v\n", err)
 		waitOnExit()
 		return
 	}
 
-	rawProxy := TorProxyURL
-	pacReturn := "SOCKS5 " + TorEndpoint
-
-	fmt.Println("[*] Validando túnel e rota do Gateway...")
-	info, err := TestTunnelReal(rawProxy)
-	if err != nil {
-		fmt.Printf("[-] Falha na validação do túnel Tor: %v\n", err)
-		stopTor()
-		waitOnExit()
-		return
-	}
-	fmt.Printf("[+] Túnel validado: %s\n", info)
-
+	pacReturn := fmt.Sprintf("SOCKS5 127.0.0.1:%d", port)
 	startSession(pacReturn, true)
 }
 
