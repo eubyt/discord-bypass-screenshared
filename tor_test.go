@@ -30,6 +30,9 @@ func TestGetTorCacheDir(t *testing.T) {
 }
 
 func TestEnsureTorRunning(t *testing.T) {
+	if os.Getenv("CI") != "" {
+		t.Skip("Pulando teste com rede Tor ao vivo em ambiente CI")
+	}
 	port, err := EnsureTorRunning()
 	if err != nil {
 		t.Fatalf("EnsureTorRunning falhou: %v", err)
