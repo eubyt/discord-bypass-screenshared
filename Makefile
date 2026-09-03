@@ -25,8 +25,5 @@ test:
 	@echo "[*] Executando testes unitários..."
 	go test -v ./...
 
-status: build
-	@./$(TARGET) -s
-
 clean:
 	rm -rf $(BUILD_DIR)

@@ -1,83 +1,84 @@
-# Discord Bypass Screenshared
+# Discord Bypass (Brasil) • por Eubyt
 
-O Discord Bypass é uma ferramenta multiplataforma desenvolvida em Go para contornar bloqueios de conexão do Discord por meio de roteamento seletivo pela rede Tor.
-
-## 1. O que é e Como Funciona
-
-O programa atua como um **supervisor de execução e proxy de controle** para o cliente desktop do Discord (Electron/Chromium). Em vez de jogar todo o tráfego cegamente pelo Tor ele aplica uma estratégia de **roteamento seletivo**.
-
-- **Roteamento Seletivo no Chromium**:
-  O Discord é inicializado injetando switches nativos de rede:
-  - `--proxy-server=socks5://127.0.0.1:9050`: Direciona autenticação, API REST e conexões em tempo real (WebSocket Gateway) para o Tor.
-  - `--proxy-bypass-list=...`: Força conexão direta pela internet local para:
-    - **Voz e Vídeo WebRTC (`*.discord.media`, `*.voice.discord.media`)**: O Tor suporta apenas TCP; o áudio e a transmissão de tela usam pacotes UDP de baixa latência (<50ms).
-
-- **Proxy Intermediário em Go (SOCKS5 Sniffer)**:
-  - Escuta em `127.0.0.1:9050` e repassa os fluxos para a porta interna do Tor (`127.0.0.1:9055`).
-
-## 2. Como Usar
-
-### Execução Padrão
-
-Inicia o Tor, abre o Discord com o bypass ativo e exibe o tráfego ao vivo:
-
-```bash
-./discord-tor
-```
-
-_(No Windows, basta dar um **duplo clique** em `discord-tor.exe`)._
-
-Exemplo de saída no terminal:
-
-```text
-[*] Verificando Tor...
-[*] Iniciando Tor...
-[+] Rede Tor conectada (100%).
-[+] Tor pronto em socks5://127.0.0.1:9050
-[*] Localizando Discord...
-[+] Discord encontrado: /Applications/Discord.app
-[*] Fechando instância anterior...
-[*] Aplicando bypass de rede e iniciando Discord...
-[+] Discord iniciado com bypass de rede ativo.
-[*] Monitorando conexões (Pressione Ctrl+C para encerrar)...
-------------------------------------------------------------
-[TRAFEGO] Discord -> Tor: discord.com:443
-[TRAFEGO] Discord -> Tor: gateway.discord.gg:443
-[TRAFEGO] Discord -> Tor: status.discord.com:443
-```
-
-Para encerrar o Discord e o Tor juntos, pressione `Ctrl+C` no terminal ou feche a janela do Discord.
+Utilitário leve em Go para contornar o bloqueio nacional do Discord e liberar o **Go Live (compartilhamento de tela)** e a **câmera** para usuários brasileiros, sem injeção de arquivos e com suporte a **macOS, Windows e Linux**.
 
 ---
 
-### Opções de Linha de Comando (Flags)
+## 1. O que é e Como Funciona
 
-| Flag             | Descrição                                                                        |
-| :--------------- | :------------------------------------------------------------------------------- |
-| _(sem flag)_     | Modo padrão: sobe o Tor, aplica as regras de rede no Discord e monitora a sessão |
-| `discord-tor -s` | **Status**: Verifica se o Tor e o Discord estão em execução sem alterar nada     |
-| `discord-tor -t` | **Teste**: Testa a rota e exibe o endereço IP do nó de saída do Tor              |
-| `discord-tor -k` | **Kill**: Força o encerramento imediato de instâncias ativas do Discord e do Tor |
+O programa utiliza a estratégia **Standalone do GoLiveBypass**, mas de forma 100% externa: **sem modificar o `app.asar` e sem instalar mods**.
+
+### Como a trava do Discord funciona:
+O Discord não bloqueia a transmissão de tela pelo cliente. Ele decide se você pode transmitir baseado no IP de onde parte a conexão do WebSocket de autenticação (`gateway.discord.gg`). Se a conexão for do Brasil, a conta recebe a trava. Se o gateway for conectado a partir de um IP internacional, a trava é removida.
+
+### Detalhes da Arquitetura:
+* **Mini-Servidor PAC Interno Dinâmico**:
+  O programa abre um mini-servidor HTTP local em uma porta dinâmica livre (`127.0.0.1:0`), servindo um script PAC (*Proxy Auto-Config*):
+  ```javascript
+  function FindProxyForURL(url, host) {
+      if (shExpMatch(host, "gateway.discord.gg")) {
+          return "%PROXY%; DIRECT";
+      }
+      return "DIRECT";
+  }
+  ```
+* **Lançamento Nativo via `--proxy-pac-url`**:
+  O Discord é iniciado passando a URL do PAC. O Chromium aplica a regra automaticamente:
+  * **Apenas `gateway.discord.gg`** passa pelo túnel (Tor ou Proxy).
+  * **Todo o restante** (áudio, vídeo WebRTC, Go Live a 60fps, chat, fotos e uploads) sai **direto pela sua internet local**.
+  * **Zero Erro 2012**: como o áudio e vídeo não passam pelo Tor e não sofrem conflito de IP (*ICE mismatch*), a transmissão de tela funciona perfeitamente sem loading infinito.
+* **Validação Dupla de Conexão TLS**:
+  Antes de abrir o Discord, o programa testa a rota:
+  1. `https://cloudflare.com/cdn-cgi/trace`: confirma túnel ativo, certificado válido e país de saída fora do Brasil (`loc!=BR`).
+  2. `https://gateway.discord.gg`: confirma que os servidores do Discord estão alcançáveis pelo túnel.
+
+---
+
+## 2. Como Usar
+
+Ao dar duplo clique no executável (ou rodar no terminal), o menu interativo é exibido:
+
+```text
+============================================================
+  Bypass do Bloqueio do Discord (Brasil) • por Eubyt
+============================================================
+[1] Usar Rede Tor (Automático)
+[2] Usar Proxy / VPN personalizada
+[0] Sair
+
+Escolha uma opção: 
+```
+
+### Opções:
+1. **Opção [1]**: Baixa o Tor portátil oficial automaticamente para a pasta temporária do sistema (`/tmp` ou `%TEMP%`), inicia de forma silenciosa, valida o túnel e abre o Discord.
+2. **Opção [2]**: Permite digitar o endereço de uma Proxy ou VPN própria (ex: `127.0.0.1:1080`, `socks5://user:pass@host:port` ou `http://host:port`). O programa valida a rota antes de fechar o Discord anterior. Se o teste falhar, avisa o erro e não altera o Discord.
+3. **Opção [0]**: Encerra o programa.
+
+### Encerramento:
+* Se você pressionar `Ctrl+C` no terminal, o Discord e o túnel são finalizados juntos.
+* Se você fechar a janela do Discord, o túnel é encerrado e o terminal exibe `Pressione Enter para sair...` (evitando fechar a janela do CMD no Windows de forma repentina).
 
 ---
 
 ## 3. Como Compilar (Build)
 
-Todos os binários gerados são salvos na pasta `build`.
-
 ```bash
 # 1. Compilar para o sistema atual (macOS ou Linux)
 make build
+# -> Gera: build/discord-tor
 
-# 2. Compilar para Windows
+# 2. Compilar para Windows (Cross-compilation 64 bits)
 make build-windows
+# -> Gera: build/discord-tor.exe
 
 # 3. Executar os testes unitários automatizados
 make test
-
-# 4. Compilar e rodar imediatamente
-make run
-
-# 5. Limpar os artefatos gerados
-make clean
 ```
+
+### Testes Automatizados (`make test`)
+A suíte de testes unitários valida:
+* Geração do script PAC (garante roteamento exclusivo de `gateway.discord.gg` e `DIRECT` para o resto).
+* Parser e normalização de endereços de proxy SOCKS5 e HTTP.
+* Funcionamento do mini-servidor PAC HTTP local com MIME type correto.
+* Detecção dos caminhos do executável do Discord por sistema operacional.
+* Nomenclatura e pasta de cache do bundle do Tor.

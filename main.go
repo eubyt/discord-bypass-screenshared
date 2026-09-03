@@ -1,177 +1,223 @@
 package main
 
 import (
-	"flag"
+	"bufio"
+	"context"
 	"fmt"
-	"io"
-	"net/http"
-	"net/url"
 	"os"
 	"os/signal"
 	"runtime"
+	"strings"
 	"syscall"
 	"time"
 )
 
-func waitOnWindows() {
-	if runtime.GOOS == "windows" {
-		fmt.Println("\nPressione Enter para fechar esta janela...")
-		var b [1]byte
-		_, _ = os.Stdin.Read(b[:])
-	}
+func waitOnExit() {
+	fmt.Print("\nPressione Enter para sair...")
+	reader := bufio.NewReader(os.Stdin)
+	_, _ = reader.ReadString('\n')
+}
+
+func printBanner() {
+	fmt.Println("============================================================")
+	fmt.Println("  Bypass do Bloqueio do Discord (Brasil) • por Eubyt")
+	fmt.Println("============================================================")
 }
 
 func main() {
 	if runtime.GOOS == "windows" {
-		fmt.Print("\033]0;Discord Bypass\007")
+		// Ajusta o título do console no Windows
+		_ = syscall.Exec
 	}
 
-	fmt.Println("============================================================")
-	fmt.Println("  Bypass do Bloqueio do Discord no Brasil")
-	fmt.Println("  Desenvolvido por Eubyt")
-	fmt.Println("============================================================")
+	reader := bufio.NewReader(os.Stdin)
 
-	killOnly := flag.Bool("k", false, "Fecha o Discord e o Tor")
-	testOnly := flag.Bool("t", false, "Testa a conexão Tor")
-	statusOnly := flag.Bool("s", false, "Verifica o status atual")
-	flag.Parse()
+	for {
+		printBanner()
+		fmt.Println("[1] Usar Rede Tor (Automático)")
+		fmt.Println("[2] Usar Proxy / VPN personalizada")
+		fmt.Println("[0] Sair")
+		fmt.Print("\nEscolha uma opção: ")
 
-	if *killOnly {
-		fmt.Println("[*] Fechando Discord e Tor...")
-		killDiscord()
-		stopTor()
-		fmt.Println("[+] Processos finalizados.")
-		waitOnWindows()
-		return
-	}
-
-	if *statusOnly {
-		torOnline := isSocks5Alive(TorProxyEndpoint) || isSocks5Alive(TorInternalEndpoint)
-		discordOnline := isDiscordRunning()
-		fmt.Printf("Tor:     %v\n", torOnline)
-		fmt.Printf("Discord: %v\n", discordOnline)
-		waitOnWindows()
-		return
-	}
-
-	// Tor
-	fmt.Println("[*] Verificando Tor...")
-	torProxy, err := ensureTorRunning()
-	if err != nil {
-		fmt.Printf("[-] Erro no Tor: %v\n", err)
-		waitOnWindows()
-		os.Exit(1)
-	}
-	fmt.Printf("[+] Tor pronto em %s\n", torProxy)
-
-	if *testOnly {
-		testTorConnection(torProxy)
-		stopTor()
-		waitOnWindows()
-		return
-	}
-
-	// Discord
-	fmt.Println("[*] Localizando Discord...")
-	discordPath, err := locateDiscord()
-	if err != nil {
-		fmt.Printf("[-] Erro: %v\n", err)
-		stopTor()
-		waitOnWindows()
-		os.Exit(1)
-	}
-	fmt.Printf("[+] Discord encontrado: %s\n", discordPath)
-
-	if isDiscordRunning() {
-		fmt.Println("[*] Fechando instância anterior...")
-		killDiscord()
-		time.Sleep(500 * time.Millisecond)
-	}
-
-	fmt.Println("[*] Aplicando bypass de rede e iniciando Discord...")
-	if err := launchDiscord(discordPath, torProxy); err != nil {
-		fmt.Printf("[-] Falha ao iniciar: %v\n", err)
-		stopTor()
-		waitOnWindows()
-		os.Exit(1)
-	}
-	fmt.Println("[+] Discord iniciado com bypass de rede ativo.")
-	fmt.Println("[*] Monitorando conexões (Pressione Ctrl+C para encerrar)...")
-	fmt.Println("------------------------------------------------------------")
-
-	// Ctrl+C
-	sigChan := make(chan os.Signal, 1)
-	signal.Notify(sigChan, os.Interrupt, syscall.SIGTERM)
-
-	discordClosed := make(chan struct{})
-	go func() {
-		// Aguarda o processo do Discord
-		started := false
-		for i := 0; i < 30; i++ {
-			time.Sleep(1 * time.Second)
-			if isDiscordRunning() {
-				started = true
-				break
-			}
-		}
-
-		if !started {
-			fmt.Println("\n[-] AVISO: O processo do Discord não iniciou em 30s.")
-			close(discordClosed)
+		input, err := reader.ReadString('\n')
+		if err != nil {
 			return
 		}
 
-		// Monitora até o Discord fechar de fato
-		misses := 0
-		for {
-			time.Sleep(1 * time.Second)
-			if !isDiscordRunning() {
-				misses++
-				if misses >= 3 {
-					close(discordClosed)
-					return
-				}
-			} else {
-				misses = 0
+		choice := strings.TrimSpace(input)
+		switch choice {
+		case "0":
+			fmt.Println("Encerrando.")
+			return
+
+		case "1":
+			runBypassTor(reader)
+			return
+
+		case "2":
+			if runBypassCustom(reader) {
+				return
 			}
+			// Se o teste falhar na opção 2, volta para o menu
+			fmt.Println()
+
+		default:
+			fmt.Println("[-] Opção inválida. Tente novamente.")
 		}
-	}()
-
-	select {
-	case <-sigChan:
-		fmt.Println("\n[*] Sinal recebido (Ctrl+C). Encerrando Discord e Tor...")
-	case <-discordClosed:
-		fmt.Println("\n[*] Discord foi fechado pelo usuário. Encerrando Tor...")
 	}
-
-	killDiscord()
-	stopTor()
-	fmt.Println("[+] Discord e Tor finalizados com sucesso.")
-	waitOnWindows()
 }
 
-func testTorConnection(proxyURLStr string) {
-	fmt.Println("[*] Testando IP de saída do Tor...")
-	proxyURL, err := url.Parse(proxyURLStr)
+func runBypassTor(reader *bufio.Reader) {
+	_, err := EnsureTorRunning()
 	if err != nil {
-		fmt.Printf("[-] URL inválida: %v\n", err)
+		fmt.Printf("[-] Erro ao iniciar o Tor: %v\n", err)
+		waitOnExit()
 		return
 	}
 
-	client := &http.Client{
-		Transport: &http.Transport{
-			Proxy: http.ProxyURL(proxyURL),
-		},
-		Timeout: 20 * time.Second,
-	}
+	rawProxy := TorProxyURL
+	pacReturn := "SOCKS5 " + TorEndpoint
 
-	resp, err := client.Get("https://check.torproject.org/api/ip")
+	fmt.Println("[*] Validando túnel e rota do Gateway...")
+	info, err := TestTunnelReal(rawProxy)
 	if err != nil {
-		fmt.Printf("[-] Falha no teste: %v\n", err)
+		fmt.Printf("[-] Falha na validação do túnel Tor: %v\n", err)
+		stopTor()
+		waitOnExit()
 		return
 	}
-	defer resp.Body.Close()
+	fmt.Printf("[+] Túnel validado: %s\n", info)
 
-	body, _ := io.ReadAll(resp.Body)
-	fmt.Printf("[+] Resposta: %s\n", string(body))
+	startSession(pacReturn, true)
+}
+
+func runBypassCustom(reader *bufio.Reader) bool {
+	fmt.Print("\nDigite o endereço da Proxy / VPN (ex: 127.0.0.1:1080 ou socks5://...): ")
+	input, err := reader.ReadString('\n')
+	if err != nil {
+		return false
+	}
+
+	cfg, err := ParseProxyAddress(input)
+	if err != nil {
+		fmt.Printf("[-] Endereço inválido: %v\n", err)
+		return false
+	}
+
+	fmt.Printf("[*] Testando conexão via %s...\n", cfg.RawURL)
+	info, err := TestTunnelReal(cfg.RawURL)
+	if err != nil {
+		fmt.Printf("[-] Teste de túnel falhou: %v\n", err)
+		fmt.Println("[!] O Discord NÃO foi fechado. Verifique os dados e tente novamente.")
+		return false
+	}
+
+	fmt.Printf("[+] Túnel validado com sucesso: %s\n", info)
+	startSession(cfg.PacReturn, false)
+	return true
+}
+
+func startSession(pacReturn string, isTor bool) {
+	// 1. Inicia o mini-servidor PAC na porta dinâmica :0
+	pacScript := BuildPacScript(pacReturn)
+	pacServer, pacURL, err := StartPacServer(pacScript)
+	if err != nil {
+		fmt.Printf("[-] Erro ao iniciar servidor PAC: %v\n", err)
+		if isTor {
+			stopTor()
+		}
+		waitOnExit()
+		return
+	}
+	defer func() {
+		_ = pacServer.Shutdown(context.Background())
+	}()
+
+	fmt.Printf("[+] Servidor PAC ativo em %s\n", pacURL)
+
+	// 2. Localiza o Discord
+	discordPath, err := locateDiscord()
+	if err != nil {
+		fmt.Printf("[-] %v\n", err)
+		if isTor {
+			stopTor()
+		}
+		waitOnExit()
+		return
+	}
+	fmt.Printf("[+] Discord localizado: %s\n", discordPath)
+
+	// 3. Fecha instâncias anteriores do Discord
+	if isDiscordRunning() {
+		fmt.Println("[*] Fechando instância anterior do Discord...")
+		killDiscord()
+		time.Sleep(1 * time.Second)
+	}
+
+	// 4. Inicia o Discord apontando para o PAC
+	fmt.Println("[*] Aplicando bypass de Gateway e iniciando Discord...")
+	if err := launchDiscord(discordPath, pacURL); err != nil {
+		fmt.Printf("[-] Falha ao iniciar Discord: %v\n", err)
+		if isTor {
+			stopTor()
+		}
+		waitOnExit()
+		return
+	}
+
+	fmt.Println("[+] Discord iniciado com bypass de rede ativo!")
+	fmt.Println("[*] Monitorando sessão (Pressione Ctrl+C para encerrar)...")
+
+	// 5. Canal de sinais (Ctrl+C / SIGTERM)
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+
+	// Aguarda o processo do Discord aparecer
+	for i := 0; i < 30; i++ {
+		if isDiscordRunning() {
+			break
+		}
+		time.Sleep(500 * time.Millisecond)
+	}
+
+	// Loop de supervisão
+	ticker := time.NewTicker(2 * time.Second)
+	defer ticker.Stop()
+
+	closedByDiscord := false
+
+	for {
+		select {
+		case <-sigCh:
+			fmt.Println("\n[*] Sinal recebido. Encerrando Discord e túnel...")
+			killDiscord()
+			if isTor {
+				stopTor()
+			}
+			fmt.Println("[+] Sessão encerrada com sucesso.")
+			return
+
+		case <-ticker.C:
+			if !isDiscordRunning() {
+				// Confirma ausência em 2 checagens consecutivas
+				time.Sleep(1 * time.Second)
+				if !isDiscordRunning() {
+					closedByDiscord = true
+					break
+				}
+			}
+		}
+
+		if closedByDiscord {
+			break
+		}
+	}
+
+	fmt.Println("\n[*] Discord foi encerrado pelo usuário.")
+	if isTor {
+		stopTor()
+	}
+	_ = pacServer.Shutdown(context.Background())
+
+	waitOnExit()
 }
