@@ -14,7 +14,6 @@ O programa atua como um **supervisor de execução e proxy de controle** para o 
 
 - **Proxy Intermediário em Go (SOCKS5 Sniffer)**:
   - Escuta em `127.0.0.1:9050` e repassa os fluxos para a porta interna do Tor (`127.0.0.1:9055`).
-    move atributos de quarentena (`xattr -cr`) automaticamente.
 
 ## 2. Como Usar
 
@@ -53,12 +52,12 @@ Para encerrar o Discord e o Tor juntos, pressione `Ctrl+C` no terminal ou feche 
 
 ### Opções de Linha de Comando (Flags)
 
-| Flag              | Descrição                                                                        |
-| :---------------- | :------------------------------------------------------------------------------- |
-| _(sem flag)_      | Modo padrão: sobe o Tor, aplica as regras de rede no Discord e monitora a sessão |
-| `.discord-tor -s` | **Status**: Verifica se o Tor e o Discord estão em execução sem alterar nada     |
-| `discord-tor -t`  | **Teste**: Testa a rota e exibe o endereço IP do nó de saída do Tor              |
-| `discord-tor -k`  | **Kill**: Força o encerramento imediato de instâncias ativas do Discord e do Tor |
+| Flag             | Descrição                                                                        |
+| :--------------- | :------------------------------------------------------------------------------- |
+| _(sem flag)_     | Modo padrão: sobe o Tor, aplica as regras de rede no Discord e monitora a sessão |
+| `discord-tor -s` | **Status**: Verifica se o Tor e o Discord estão em execução sem alterar nada     |
+| `discord-tor -t` | **Teste**: Testa a rota e exibe o endereço IP do nó de saída do Tor              |
+| `discord-tor -k` | **Kill**: Força o encerramento imediato de instâncias ativas do Discord e do Tor |
 
 ---
 
