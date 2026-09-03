@@ -22,7 +22,7 @@ O programa atua como um **supervisor de execução e proxy de controle** para o 
 Inicia o Tor, abre o Discord com o bypass ativo e exibe o tráfego ao vivo:
 
 ```bash
-./build/discord-tor
+./discord-tor
 ```
 
 _(No Windows, basta dar um **duplo clique** em `discord-tor.exe`)._
