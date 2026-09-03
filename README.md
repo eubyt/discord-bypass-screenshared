@@ -1,4 +1,4 @@
-# Discord Bypass (Brasil) • por Eubyt
+# Discord Bypass
 
 Utilitário leve em Go para contornar o bloqueio nacional do Discord e liberar o **Go Live (compartilhamento de tela)** e a **câmera** para usuários brasileiros.
 
