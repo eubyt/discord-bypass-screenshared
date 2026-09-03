@@ -105,63 +105,92 @@ func TestTunnelReal(rawProxyURL string) (string, error) {
 		return "", fmt.Errorf("proxy inválida: %w", err)
 	}
 
+	// Timeout de até 35s: no primeiro arranque do Tor, a construção de circuitos
+	// (Guard -> Middle -> Exit) leva entre 10 e 25 segundos na máquina do usuário.
 	transport := &http.Transport{
 		Proxy: http.ProxyURL(proxyParsed),
 		DialContext: (&net.Dialer{
-			Timeout:   8 * time.Second,
-			KeepAlive: 15 * time.Second,
+			Timeout:   30 * time.Second,
+			KeepAlive: 30 * time.Second,
 		}).DialContext,
-		TLSHandshakeTimeout: 8 * time.Second,
+		TLSHandshakeTimeout: 25 * time.Second,
 	}
 
 	client := &http.Client{
 		Transport: transport,
-		Timeout:   12 * time.Second,
+		Timeout:   35 * time.Second,
 	}
 
-	// 1. Teste Cloudflare cdn-cgi/trace
-	reqTrace, err := http.NewRequestWithContext(context.Background(), "GET", "https://cloudflare.com/cdn-cgi/trace", nil)
-	if err != nil {
-		return "", err
-	}
-	reqTrace.Header.Set("User-Agent", "Mozilla/5.0")
-
-	respTrace, err := client.Do(reqTrace)
-	if err != nil {
-		return "", fmt.Errorf("falha no túnel TLS (cloudflare.com): %w", err)
-	}
-	defer respTrace.Body.Close()
-
-	bodyBytes, _ := io.ReadAll(io.LimitReader(respTrace.Body, 4096))
-	bodyStr := string(bodyBytes)
-
-	// Extrai país e IP do trace
 	var ip, loc string
-	lines := strings.Split(bodyStr, "\n")
-	for _, l := range lines {
-		if strings.HasPrefix(l, "ip=") {
-			ip = strings.TrimPrefix(l, "ip=")
-		} else if strings.HasPrefix(l, "loc=") {
-			loc = strings.TrimPrefix(l, "loc=")
+	var lastErr error
+
+	// 1. Teste Cloudflare cdn-cgi/trace (com até 3 tentativas para aquecer o circuito)
+	for attempt := 1; attempt <= 3; attempt++ {
+		if attempt > 1 {
+			time.Sleep(2 * time.Second)
 		}
+
+		reqTrace, err := http.NewRequestWithContext(context.Background(), "GET", "https://cloudflare.com/cdn-cgi/trace", nil)
+		if err != nil {
+			return "", err
+		}
+		reqTrace.Header.Set("User-Agent", "Mozilla/5.0")
+
+		respTrace, err := client.Do(reqTrace)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		bodyBytes, _ := io.ReadAll(io.LimitReader(respTrace.Body, 4096))
+		respTrace.Body.Close()
+		bodyStr := string(bodyBytes)
+
+		lines := strings.Split(bodyStr, "\n")
+		for _, l := range lines {
+			if strings.HasPrefix(l, "ip=") {
+				ip = strings.TrimPrefix(l, "ip=")
+			} else if strings.HasPrefix(l, "loc=") {
+				loc = strings.TrimPrefix(l, "loc=")
+			}
+		}
+
+		if loc != "" {
+			lastErr = nil
+			break
+		}
+	}
+
+	if lastErr != nil {
+		return "", fmt.Errorf("falha no túnel TLS (cloudflare.com): %w", lastErr)
 	}
 
 	if loc == "BR" {
 		return "", fmt.Errorf("o IP de saída (%s) é do Brasil (loc=BR). Use uma rota internacional", ip)
 	}
 
-	// 2. Teste direto ao gateway.discord.gg
-	reqGateway, err := http.NewRequestWithContext(context.Background(), "GET", "https://gateway.discord.gg", nil)
-	if err != nil {
-		return "", err
-	}
-	reqGateway.Header.Set("User-Agent", "Mozilla/5.0")
+	// 2. Teste direto ao gateway.discord.gg (com até 2 tentativas)
+	for attempt := 1; attempt <= 2; attempt++ {
+		reqGateway, err := http.NewRequestWithContext(context.Background(), "GET", "https://gateway.discord.gg", nil)
+		if err != nil {
+			return "", err
+		}
+		reqGateway.Header.Set("User-Agent", "Mozilla/5.0")
 
-	respGateway, err := client.Do(reqGateway)
-	if err != nil {
-		return "", fmt.Errorf("gateway.discord.gg inalcançável através da proxy: %w", err)
+		respGateway, err := client.Do(reqGateway)
+		if err != nil {
+			lastErr = err
+			time.Sleep(1 * time.Second)
+			continue
+		}
+		respGateway.Body.Close()
+		lastErr = nil
+		break
 	}
-	defer respGateway.Body.Close()
+
+	if lastErr != nil {
+		return "", fmt.Errorf("gateway.discord.gg inalcançável através da proxy: %w", lastErr)
+	}
 
 	return fmt.Sprintf("IP=%s País=%s (Gateway acessível)", ip, loc), nil
 }
