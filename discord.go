@@ -11,11 +11,24 @@ import (
 )
 
 const BypassList = "<local>;127.0.0.1;localhost;::1;" +
+	// CDN e assets do Discord (direto para performance)
 	"cdn.discordapp.com;*.discordapp.net;media.discordapp.net;images-ext-*.discordapp.net;attachments.discord.net;" +
+	// Storage externo
 	"*.storage.googleapis.com;" +
-	"*.discord.media;*.voice.discord.media;" +
+	// Voz, vídeo e compartilhamento de tela (WebRTC/UDP — incompatível com Tor)
+	"*.discord.media;*.voice.discord.media;*.discordmedia.com;" +
+	// WebRTC relay e servidores STUN
+	"*.discordapp.io;discordapp.io;stun.l.google.com;*.stun.l.google.com;" +
+	// Mídia adicional
 	"*.tenor.com;*.giphy.com;" +
+	// Integração Spotify
 	"*.spotify.com;dealer.spotify.com"
+
+// chromeFlags são switches extras do Chromium para otimização de WebRTC e rede
+var chromeFlags = []string{
+	"--disable-features=WebRtcHideLocalIpsWithMdns",
+	"--webrtc-ip-handling-policy=default_public_interface_only",
+}
 
 func isDiscordRunning() bool {
 	switch runtime.GOOS {
@@ -127,20 +140,20 @@ func locateDiscordWindows() (string, error) {
 
 func locateDiscordMac() (string, error) {
 	home, _ := os.UserHomeDir()
-	candidates := []string{
+	bundles := []string{
 		"/Applications/Discord.app",
 		"/Applications/Discord Canary.app",
 		"/Applications/Discord PTB.app",
 		filepath.Join(home, "Applications", "Discord.app"),
 	}
 
-	for _, p := range candidates {
-		if _, err := os.Stat(p); err == nil {
-			return p, nil
+	for _, bundle := range bundles {
+		if _, err := os.Stat(bundle); err == nil {
+			return bundle, nil
 		}
 	}
 
-	// Fallback mdfind
+	// Fallback: mdfind pelo bundle identifier
 	out, err := exec.Command("mdfind", "kMDItemCFBundleIdentifier == 'com.hnc.Discord'").Output()
 	if err == nil {
 		lines := strings.Split(strings.TrimSpace(string(out)), "\n")
@@ -193,42 +206,50 @@ func locateDiscordLinux() (string, error) {
 func launchDiscord(target, proxyURL string) error {
 	switch runtime.GOOS {
 	case "windows":
-		cmd := exec.Command(target,
-			"--proxy-server="+proxyURL,
-			"--proxy-bypass-list="+BypassList,
-		)
+		args := []string{
+			"--proxy-server=" + proxyURL,
+			"--proxy-bypass-list=" + BypassList,
+		}
+		args = append(args, chromeFlags...)
+		cmd := exec.Command(target, args...)
 		cmd.Dir = filepath.Dir(target)
 		cmd.Stdout = nil
 		cmd.Stderr = nil
 		return cmd.Start()
 
 	case "darwin":
-		// No macOS, usar o comando open no bundle .app preserva a permissões
-		// registrada no LaunchServices e TCC (Gravação de Tela, Mic, etc.)
+		// No macOS, usar o LaunchServices (`open -a bundlePath --args ...`)
+		// garante que o app abra como aplicativo gráfico em primeiro plano
+		// com ícone no Dock e preserva as permissões de TCC (Tela, Microfone, Câmera).
 		appPath := target
 		if idx := strings.Index(target, ".app"); idx != -1 {
 			appPath = target[:idx+4]
 		}
-		cmd := exec.Command("open", "-a", appPath, "--args",
-			"--proxy-server="+proxyURL,
-			"--proxy-bypass-list="+BypassList,
-		)
-		return cmd.Start()
+		args := []string{"-a", appPath, "--args",
+			"--proxy-server=" + proxyURL,
+			"--proxy-bypass-list=" + BypassList,
+		}
+		args = append(args, chromeFlags...)
+		return exec.Command("open", args...).Start()
 
 	default: // Linux
 		if strings.HasPrefix(target, "flatpak:") {
 			appId := strings.TrimPrefix(target, "flatpak:")
-			cmd := exec.Command("flatpak", "run", appId,
-				"--proxy-server="+proxyURL,
-				"--proxy-bypass-list="+BypassList,
-			)
+			args := []string{"run", appId,
+				"--proxy-server=" + proxyURL,
+				"--proxy-bypass-list=" + BypassList,
+			}
+			args = append(args, chromeFlags...)
+			cmd := exec.Command("flatpak", args...)
 			return cmd.Start()
 		}
 
-		cmd := exec.Command(target,
-			"--proxy-server="+proxyURL,
-			"--proxy-bypass-list="+BypassList,
-		)
+		args := []string{
+			"--proxy-server=" + proxyURL,
+			"--proxy-bypass-list=" + BypassList,
+		}
+		args = append(args, chromeFlags...)
+		cmd := exec.Command(target, args...)
 		return cmd.Start()
 	}
 }
