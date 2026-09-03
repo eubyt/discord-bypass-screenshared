@@ -34,9 +34,6 @@ O Discord não bloqueia a transmissão de tela pelo cliente. Ele decide se você
 Ao dar duplo clique no executável (ou rodar no terminal), o menu interativo é exibido:
 
 ```text
-============================================================
-  Bypass do Bloqueio do Discord (Brasil) • por Eubyt
-============================================================
 [1] Usar Rede Tor (Automático)
 [2] Usar Proxy / VPN personalizada
 [0] Sair
