@@ -12,8 +12,8 @@ func TestBuildPacScript(t *testing.T) {
 	proxy := "SOCKS5 127.0.0.1:9050"
 	pac := BuildPacScript(proxy)
 
-	if !strings.Contains(pac, `shExpMatch(host, "gateway.discord.gg")`) {
-		t.Errorf("PAC deve conter regra para gateway.discord.gg")
+	if !strings.Contains(pac, `.discord.gg`) {
+		t.Errorf("PAC deve conter regra para *.discord.gg")
 	}
 
 	if !strings.Contains(pac, proxy) {

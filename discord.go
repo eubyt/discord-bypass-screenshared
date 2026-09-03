@@ -180,11 +180,15 @@ func locateDiscordLinux() (string, error) {
 }
 
 func launchDiscord(target, pacURL string) error {
-	pacArg := "--proxy-pac-url=" + pacURL
+	args := []string{
+		"--proxy-pac-url=" + pacURL,
+		"--disable-features=WebRtcHideLocalIpsWithMdns",
+		"--webrtc-ip-handling-policy=default_public_interface_only",
+	}
 
 	switch runtime.GOOS {
 	case "windows":
-		cmd := exec.Command(target, pacArg)
+		cmd := exec.Command(target, args...)
 		cmd.Dir = filepath.Dir(target)
 		cmd.Stdout = nil
 		cmd.Stderr = nil
@@ -195,16 +199,18 @@ func launchDiscord(target, pacURL string) error {
 		if idx := strings.Index(target, ".app"); idx != -1 {
 			appPath = target[:idx+4]
 		}
-		cmd := exec.Command("open", "-a", appPath, "--args", pacArg)
+		cmdArgs := append([]string{"-a", appPath, "--args"}, args...)
+		cmd := exec.Command("open", cmdArgs...)
 		return cmd.Start()
 
 	default: // Linux
 		if strings.HasPrefix(target, "flatpak:") {
 			appId := strings.TrimPrefix(target, "flatpak:")
-			cmd := exec.Command("flatpak", "run", appId, pacArg)
+			cmdArgs := append([]string{"run", appId}, args...)
+			cmd := exec.Command("flatpak", cmdArgs...)
 			return cmd.Start()
 		}
-		cmd := exec.Command(target, pacArg)
+		cmd := exec.Command(target, args...)
 		return cmd.Start()
 	}
 }

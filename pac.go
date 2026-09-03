@@ -57,10 +57,10 @@ func ParseProxyAddress(input string) (*ProxyConfig, error) {
 	}, nil
 }
 
-// BuildPacScript gera o script PAC que roteia estritamente gateway.discord.gg
+// BuildPacScript gera o script PAC que roteia estritamente *.discord.gg (gateways)
 func BuildPacScript(pacReturn string) string {
 	return fmt.Sprintf(`function FindProxyForURL(url, host) {
-    if (shExpMatch(host, "gateway.discord.gg")) {
+    if (dnsDomainIs(host, ".discord.gg") || shExpMatch(host, "*.discord.gg") || host === "discord.gg") {
         return "%s; DIRECT";
     }
     return "DIRECT";
