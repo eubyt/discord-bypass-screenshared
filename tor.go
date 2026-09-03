@@ -428,9 +428,6 @@ func ensureTorRunning() (string, error) {
 	if isSocks5Alive(TorProxyEndpoint) {
 		return TorProxyURL, nil
 	}
-	if isSocks5Alive("127.0.0.1:9150") {
-		return "socks5://127.0.0.1:9150", nil
-	}
 
 	stopTor()
 	time.Sleep(200 * time.Millisecond)
