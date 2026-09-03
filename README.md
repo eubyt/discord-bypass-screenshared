@@ -1,38 +1,33 @@
 # Discord Bypass (Brasil) • por Eubyt
 
-Utilitário leve em Go para contornar o bloqueio nacional do Discord e liberar o **Go Live (compartilhamento de tela)** e a **câmera** para usuários brasileiros, sem injeção de arquivos e com suporte a **macOS, Windows e Linux**.
+Utilitário leve em Go para contornar o bloqueio nacional do Discord e liberar o **Go Live (compartilhamento de tela)** e a **câmera** para usuários brasileiros.
 
 ---
 
 ## 1. O que é e Como Funciona
 
-O programa utiliza a estratégia **Standalone do GoLiveBypass**, mas de forma 100% externa: **sem modificar o `app.asar` e sem instalar mods**.
-
-### Como a trava do Discord funciona:
 O Discord não bloqueia a transmissão de tela pelo cliente. Ele decide se você pode transmitir baseado no IP de onde parte a conexão do WebSocket de autenticação (`gateway.discord.gg`). Se a conexão for do Brasil, a conta recebe a trava. Se o gateway for conectado a partir de um IP internacional, a trava é removida.
 
 ### Detalhes da Arquitetura:
-* **Mini-Servidor PAC Interno Dinâmico**:
-  O programa abre um mini-servidor HTTP local em uma porta dinâmica livre (`127.0.0.1:0`), servindo um script PAC (*Proxy Auto-Config*):
+
+- **Mini-Servidor PAC Interno Dinâmico**:
+  O programa abre um mini-servidor HTTP local em uma porta dinâmica livre (`127.0.0.1:0`), servindo um script PAC (_Proxy Auto-Config_):
   ```javascript
   function FindProxyForURL(url, host) {
-      if (shExpMatch(host, "gateway.discord.gg")) {
-          return "%PROXY%; DIRECT";
-      }
-      return "DIRECT";
+    if (shExpMatch(host, "gateway.discord.gg")) {
+      return "%PROXY%; DIRECT";
+    }
+    return "DIRECT";
   }
   ```
-* **Lançamento Nativo via `--proxy-pac-url`**:
+- **Lançamento Nativo via `--proxy-pac-url`**:
   O Discord é iniciado passando a URL do PAC. O Chromium aplica a regra automaticamente:
-  * **Apenas `gateway.discord.gg`** passa pelo túnel (Tor ou Proxy).
-  * **Todo o restante** (áudio, vídeo WebRTC, Go Live a 60fps, chat, fotos e uploads) sai **direto pela sua internet local**.
-  * **Zero Erro 2012**: como o áudio e vídeo não passam pelo Tor e não sofrem conflito de IP (*ICE mismatch*), a transmissão de tela funciona perfeitamente sem loading infinito.
-* **Validação Dupla de Conexão TLS**:
+  - **Apenas `gateway.discord.gg`** passa pelo túnel (Tor ou Proxy).
+  - **Todo o restante** (áudio, vídeo WebRTC, Go Live, chat, uploads) sai **direto pela sua internet local**.
+- **Validação Dupla de Conexão TLS**:
   Antes de abrir o Discord, o programa testa a rota:
   1. `https://cloudflare.com/cdn-cgi/trace`: confirma túnel ativo, certificado válido e país de saída fora do Brasil (`loc!=BR`).
   2. `https://gateway.discord.gg`: confirma que os servidores do Discord estão alcançáveis pelo túnel.
-
----
 
 ## 2. Como Usar
 
@@ -46,17 +41,19 @@ Ao dar duplo clique no executável (ou rodar no terminal), o menu interativo é 
 [2] Usar Proxy / VPN personalizada
 [0] Sair
 
-Escolha uma opção: 
+Escolha uma opção:
 ```
 
 ### Opções:
+
 1. **Opção [1]**: Baixa o Tor portátil oficial automaticamente para a pasta temporária do sistema (`/tmp` ou `%TEMP%`), inicia de forma silenciosa, valida o túnel e abre o Discord.
 2. **Opção [2]**: Permite digitar o endereço de uma Proxy ou VPN própria (ex: `127.0.0.1:1080`, `socks5://user:pass@host:port` ou `http://host:port`). O programa valida a rota antes de fechar o Discord anterior. Se o teste falhar, avisa o erro e não altera o Discord.
 3. **Opção [0]**: Encerra o programa.
 
 ### Encerramento:
-* Se você pressionar `Ctrl+C` no terminal, o Discord e o túnel são finalizados juntos.
-* Se você fechar a janela do Discord, o túnel é encerrado e o terminal exibe `Pressione Enter para sair...` (evitando fechar a janela do CMD no Windows de forma repentina).
+
+- Se você pressionar `Ctrl+C` no terminal, o Discord e o túnel são finalizados juntos.
+- Se você fechar a janela do Discord, o túnel é encerrado e o terminal exibe `Pressione Enter para sair...` (evitando fechar a janela do CMD no Windows de forma repentina).
 
 ---
 
@@ -74,11 +71,3 @@ make build-windows
 # 3. Executar os testes unitários automatizados
 make test
 ```
-
-### Testes Automatizados (`make test`)
-A suíte de testes unitários valida:
-* Geração do script PAC (garante roteamento exclusivo de `gateway.discord.gg` e `DIRECT` para o resto).
-* Parser e normalização de endereços de proxy SOCKS5 e HTTP.
-* Funcionamento do mini-servidor PAC HTTP local com MIME type correto.
-* Detecção dos caminhos do executável do Discord por sistema operacional.
-* Nomenclatura e pasta de cache do bundle do Tor.
